@@ -14,19 +14,59 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
+  let activeStream = null;
+
+  const cancelActiveStream = () => {
+    if (activeStream) {
+      clearTimeout(activeStream.timeout);
+      clearInterval(activeStream.interval);
+      activeStream = null;
+    }
+  };
+
+  socket.on("stream:stop", () => {
+    const id = activeStream?.id;
+    cancelActiveStream();
+    if (id != null) {
+      socket.emit("stream:end", { streamId: id });
+    }
+  });
+
   socket.on("message", (data) => {
     const userMessage = typeof data === "string" ? data : data.text;
     console.log("Received:", userMessage);
 
-    // Simulate typing delay, then echo the message back
-    const delay = 500 + Math.random() * 1000;
-    setTimeout(() => {
-      socket.emit("message", {
-        role: "assistant",
-        text: userMessage,
-        timestamp: Date.now(),
-      });
-    }, delay);
+    cancelActiveStream();
+
+    const streamId = data.streamId;
+    const chars = [...userMessage];
+    let index = 0;
+    const stream = { id: streamId, timeout: null, interval: null };
+    activeStream = stream;
+
+    stream.timeout = setTimeout(() => {
+      if (activeStream !== stream) return;
+
+      socket.emit("stream:start", { streamId });
+
+      stream.interval = setInterval(
+        () => {
+          if (activeStream !== stream) {
+            clearInterval(stream.interval);
+            return;
+          }
+          if (index < chars.length) {
+            socket.emit("stream:chunk", { char: chars[index], streamId });
+            index++;
+          } else {
+            clearInterval(stream.interval);
+            socket.emit("stream:end", { streamId });
+            if (activeStream === stream) activeStream = null;
+          }
+        },
+        5 + Math.random() * 5,
+      );
+    }, 1500);
   });
 
   socket.on("disconnect", () => {

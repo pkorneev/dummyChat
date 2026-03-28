@@ -1,5 +1,11 @@
+import ChatContainer from "./components/widgets/ChatContainer";
+
 function App() {
-  return <></>;
+  return (
+    <>
+      <ChatContainer />
+    </>
+  );
 }
 
 export default App;
